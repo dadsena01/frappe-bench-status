@@ -111,7 +111,8 @@ while true; do
 	echo -e " ${B}${C}Actions${RST}"
 	echo -e "   ${B}${Y}m${RST}  migrate           ${B}${Y}c${RST}  clear cache       ${B}${Y}o${RST}  open in browser"
 	echo -e "   ${B}${Y}g${RST}  git status        ${B}${Y}b${RST}  open app in code  ${B}${Y}l${RST}  tail error log"
-	echo -e "   ${B}${Y}n${RST}  new site / app    ${B}${Y}q${RST}  quit"
+	echo -e "   ${B}${Y}n${RST}  new site / app    ${B}${Y}d${RST}  dependencies     ${B}${Y}h${RST}  clean hosts"
+	echo -e "   ${B}${Y}q${RST}  quit"
 	echo -e "${GY}${SEP}${RST}"
 
 	read -n1 -s -p " > " key 2>/dev/null || true
@@ -217,6 +218,49 @@ while true; do
 					run_cmd "bench --site $site_name add-to-hosts" 10
 					;;
 			esac
+			;;
+		d)
+			echo
+			APPS=($(get_apps))
+			# app dependency tree from hooks.py
+			echo -e " ${B}${W}App dependencies:${RST}"
+			for a in "${APPS[@]}"; do
+				hooks="$BENCH_DIR/apps/$a/hooks.py"
+				deps=""
+				[ -f "$hooks" ] && deps=$(grep -oP "(?<=required_apps = \[)[^\]]*" "$hooks" 2>/dev/null | tr -d "'\" " || true)
+				[ -z "$deps" ] && deps="${GY}none${RST}" || deps="$deps"
+				printf "   %-18s → %s\n" "$a" "$deps"
+			done
+			# per-site app list
+			echo -e "\n ${B}${W}Apps per site:${RST}"
+			for s in "${SITE_NAMES[@]}"; do
+				site_apps=$(cd "$BENCH_DIR" && bench --site "$s" list-apps 2>/dev/null | paste -sd, | sed 's/^,//;s/,$//' || echo "${GY}error${RST}")
+				echo "   $s"
+				echo "     apps: $site_apps"
+			done
+			echo -e "\n${GY}┈ done (press any key)${RST}"
+			read -n1 -s
+			;;
+		h)
+			echo
+			# find duplicate host entries
+			dups=$(awk '/^[^#]/ && /127\.0\.0\.1/ {host=$2; if (seen[host]++) print host}' /etc/hosts | sort -u)
+			if [ -z "$dups" ]; then
+				echo -e " ${G}No duplicate host entries found.${RST}"
+			else
+				echo -e " ${R}Duplicate entries found:${RST}"
+				echo "$dups" | sed 's/^/   /'
+				echo -e "\n Remove duplicates from /etc/hosts? (needs sudo) [y/N] "
+				read -r confirm
+				case "$confirm" in
+					y|Y)
+						sudo sh -c "awk '!/^#/ && /127\.0\.0\.1/{if(seen[\$2]++) next} 1' /etc/hosts > /etc/hosts.tmp && mv /etc/hosts.tmp /etc/hosts"
+						echo -e " ${G}Cleaned.${RST}"
+						;;
+				esac
+			fi
+			echo -e "\n${GY}┈ done (press any key)${RST}"
+			read -n1 -s
 			;;
 		q) break ;;
 	esac
