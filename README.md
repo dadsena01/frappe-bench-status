@@ -66,43 +66,6 @@ The install script asks whether you want this. If yes, every time you `cd` into 
 
 Works on Linux. Should work on macOS if you have the same tools.
 
-## Troubleshooting
-
-| Problem | Fix |
-|---|---|
-| **Nothing shows up** | Run from inside the bench directory (the script finds its parent folder) |
-| **bench-status: command not found** | Make sure `~/.local/bin` is in your PATH. Re-run install if needed. |
-| **Sites list is empty** | Check that `sites/*/site_config.json` files exist |
-| **Progress bars flood the screen** | They should be filtered out — if not, open an issue |
-| **Ctrl+C doesn't work cleanly** | It should — there's a `trap INT` handler. If it leaves the terminal messy, run `reset` |
-
-## Development
-
-The repo is one file that matters — `bench-status`. Edit it, test it:
-
-```bash
-./bench-status    # run directly from repo
-```
-
-Submit changes via pull request.
-
-### What not to touch
-
-The script explicitly avoids:
-- Modifying any file inside `apps/`, `sites/`, or `config/`
-- Running any `frappe.*` Python code
-- Writing to any database
-- Changing bench configuration
-
-It reads:
-- `sites/*/site_config.json` (list sites, check developer mode)
-- `sites/apps.txt` (count apps)
-- `sites/common_site_config.json` (get port)
-- `/etc/hosts` (check host entries)
-- Process list and port list via `pgrep` and `ss`
-
-It never writes anything unless you explicitly trigger a bench command from the menu.
-
 ## Contributing
 
 Issues, feature requests, and pull requests welcome. Feature backlog (not yet implemented):
