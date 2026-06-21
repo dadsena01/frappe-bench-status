@@ -1,0 +1,223 @@
+#!/usr/bin/env bash
+# bench-status — interactive bench overview with quick actions
+set -euo pipefail
+
+BENCH_DIR="$(dirname "$(readlink -f "$0")")"
+SITES_DIR="$BENCH_DIR/sites"
+
+# ── colors ───────────────────────────────────────────────────
+RST="\e[0m"; B="\e[1m"; D="\e[2m"
+G="\e[38;5;34m"; C="\e[38;5;37m"; Y="\e[38;5;220m"; M="\e[38;5;164m"
+R="\e[38;5;196m"; W="\e[38;5;255m"; GY="\e[38;5;245m"
+
+# ── ctrl+c guard ─────────────────────────────────────────────
+trap 'echo -e "\n${GY}interrupted${RST}"; return 2>/dev/null; exit 0' INT
+
+# ── helpers ──────────────────────────────────────────────────
+COLS=$(tput cols 2>/dev/null || echo 80)
+[ "$COLS" -gt 80 ] && COLS=80
+SEP=$(printf '━%.0s' $(seq 1 $((COLS - 2))))
+
+pick() {
+	local label="$1"
+	local -n arr=$2
+	local i sel
+	echo -e " ${B}${W}Select $label:${RST}" >&2
+	for i in "${!arr[@]}"; do
+		echo "   $((i+1))) ${arr[$i]}" >&2
+	done
+	read -r -p " > " sel
+	if [[ "$sel" =~ ^[0-9]+$ ]] && ((sel >= 1 && sel <= ${#arr[@]})); then
+		echo "${arr[$((sel-1))]}"
+		return 0
+	fi
+	return 1
+}
+
+clean_lines() {
+	grep -v $'\r' | grep -v '^\[=\+' || true
+}
+
+run_cmd() {
+	local cmd="$1"
+	local timeout="${2:-120}"
+	echo -e "\n${GY}┈ $cmd${RST}"
+	cd "$BENCH_DIR"
+	timeout "$timeout" bash -c "$cmd" 2>&1 | clean_lines || true
+	local rc=${PIPESTATUS[0]}
+	if [ "$rc" = 124 ]; then
+		echo -e " ${R}timed out after ${timeout}s${RST}"
+	elif [ "$rc" -ne 0 ]; then
+		echo -e " ${R}exit code $rc${RST}"
+	fi
+	echo -e "${GY}┈ done (press any key)${RST}"
+	read -n1 -s
+}
+
+get_apps() {
+	local apps=()
+	while IFS= read -r a; do
+		[ -n "$a" ] && apps+=("$a")
+	done < "$SITES_DIR/apps.txt"
+	echo "${apps[@]}"
+}
+
+# ── main loop ────────────────────────────────────────────────
+while true; do
+	# gather
+	SITE_NAMES=()
+	for d in "$SITES_DIR"/*/; do
+		[ -f "$d/site_config.json" ] && SITE_NAMES+=("$(basename "$d")")
+	done
+	TOTAL_SITES=${#SITE_NAMES[@]}
+
+	APPS_TXT="$SITES_DIR/apps.txt"
+	TOTAL_APPS=0
+	[ -f "$APPS_TXT" ] && TOTAL_APPS=$(grep -c . "$APPS_TXT")
+
+	PORT=$(python3 -c "import json; f=open('$SITES_DIR/common_site_config.json'); print(json.load(f).get('webserver_port', 8000))" 2>/dev/null || echo 8000)
+	[ -z "$PORT" ] && PORT=8000
+	BENCH_PID=$(pgrep -f "bench serve" 2>/dev/null | head -1)
+	[ -n "$BENCH_PID" ] && BENCH_RUNNING="● running" || BENCH_RUNNING="○ stopped"
+
+	SITE_DISPLAY=()
+	for s in "${SITE_NAMES[@]}"; do
+		if grep -qsP "^\s*127\.0\.0\.1\s+$s\b" /etc/hosts; then
+			HOST_STATUS="✓ hosts"
+		else
+			HOST_STATUS="✗ no host"
+		fi
+		grep -qs '"developer_mode":\s*1' "$SITES_DIR/$s/site_config.json" 2>/dev/null && HOST_STATUS+=" dev"
+		PORT_CHECK=$(ss -tlnp 2>/dev/null | grep -c ":$PORT ")
+		[ "$PORT_CHECK" -gt 0 ] && LIVE="● live" || LIVE="○ idle"
+		SITE_DISPLAY+=("$s|$HOST_STATUS|$LIVE")
+	done
+
+	# render
+	[ -t 0 ] && clear 2>/dev/null || true
+	echo -e "${GY}${SEP}${RST}"
+	echo -e " ${B}${C}Sites${RST} ${GY}|${RST} ${B}${Y}$TOTAL_SITES${RST}  ${B}${C}Apps${RST} ${GY}|${RST} ${B}${Y}$TOTAL_APPS${RST}  ${B}${C}Port${RST} ${GY}|${RST} ${B}${Y}$PORT${RST}  ${B}${C}Bench${RST} ${GY}|${RST} $BENCH_RUNNING  ${B}${C}Dir${RST} ${GY}|${RST} ${D}$BENCH_DIR${RST}"
+	echo -e "${GY}${SEP}${RST}"
+	echo -e " ${B}${W}Site                     Host              Status${RST}"
+	for entry in "${SITE_DISPLAY[@]}"; do
+		IFS='|' read -r name host live <<< "$entry"
+		HC="$G"; [[ "$host" == *"✗"* ]] && HC="$R"; [[ "$host" == *"dev"* ]] && HC="$M"
+		[[ "$live" == *"live"* ]] && LC="$G" || LC="$GY"
+		echo -e " ${B}${W}$(printf "%-24s" "$name")${RST} ${HC}$(printf "%-18s" "$host")${RST} ${LC}$live${RST}"
+	done
+	echo -e "${GY}${SEP}${RST}"
+
+	# actions
+	echo -e " ${B}${C}Actions${RST}"
+	echo -e "   ${B}${Y}m${RST}  migrate           ${B}${Y}c${RST}  clear cache       ${B}${Y}o${RST}  open in browser"
+	echo -e "   ${B}${Y}g${RST}  git status        ${B}${Y}b${RST}  open app in code  ${B}${Y}l${RST}  tail error log"
+	echo -e "   ${B}${Y}n${RST}  new site / app    ${B}${Y}q${RST}  quit"
+	echo -e "${GY}${SEP}${RST}"
+
+	read -n1 -s -p " > " key 2>/dev/null || true
+	echo
+
+	case "$key" in
+		m)
+			s=$(pick "site" SITE_NAMES)
+			[ -n "$s" ] && run_cmd "bench --site $s migrate" 300
+			;;
+		c)
+			s=$(pick "site" SITE_NAMES)
+			[ -n "$s" ] && run_cmd "bench --site $s clear-cache" 30
+			;;
+		o)
+			for i in "${!SITE_NAMES[@]}"; do
+				echo "   $((i+1))) ${SITE_NAMES[$i]}"
+			done
+			read -r -p " > " sel
+			if [[ "$sel" =~ ^[0-9]+$ ]] && ((sel >= 1 && sel <= ${#SITE_NAMES[@]})); then
+				site="${SITE_NAMES[$((sel-1))]}"
+				echo -e "\n${GY}┈ opening http://$site:$PORT${RST}"
+				xdg-open "http://$site:$PORT" 2>/dev/null || true
+				sleep 1
+			fi
+			;;
+		g)
+			echo
+			APPS=($(get_apps))
+			for a in "${APPS[@]}"; do
+				dir="$BENCH_DIR/apps/$a"
+				if [ -d "$dir/.git" ]; then
+					pushd "$dir" >/dev/null
+					branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "?")
+					status=$(git status --porcelain 2>/dev/null | wc -l)
+					ahead=$(git rev-list --count @{upstream}..HEAD 2>/dev/null || echo 0)
+					behind=$(git rev-list --count HEAD..@{upstream} 2>/dev/null || echo 0)
+					popd >/dev/null
+					[ "$status" -gt 0 ] && s="${B}${R}dirty ($status)${RST}" || s="${G}clean${RST}"
+					printf "   %-18s %-16s %s\n" "$a" "$branch" "$s"
+					[ "$ahead" -gt 0 ] && echo "      ${C}↑ $ahead ahead${RST}"
+					[ "$behind" -gt 0 ] && echo "      ${M}↓ $behind behind${RST}"
+				else
+					printf "   %-18s %s\n" "$a" "${GY}no git${RST}"
+				fi
+			done
+			echo -e "\n${GY}┈ done (press any key)${RST}"
+			read -n1 -s
+			;;
+		b)
+			APPS=($(get_apps))
+			for i in "${!APPS[@]}"; do
+				echo "   $((i+1))) ${APPS[$i]}"
+			done
+			read -r -p " > " sel
+			if [[ "$sel" =~ ^[0-9]+$ ]] && ((sel >= 1 && sel <= ${#APPS[@]})); then
+				app="${APPS[$((sel-1))]}"
+				dir="$BENCH_DIR/apps/$app"
+				if [ -d "$dir" ]; then
+					echo -e "\n${GY}┈ code $dir${RST}"
+					code "$dir" 2>/dev/null || echo "   ${R}code command not found${RST}"
+					sleep 1
+				fi
+			fi
+			;;
+		l)
+			echo
+			for s in "${SITE_NAMES[@]}"; do
+				log="$SITES_DIR/$s/logs/error.log"
+				[ -f "$log" ] && tail -5 "$log" | sed "s/^/   $s: /"
+			done
+			echo -e "\n${GY}┈ done (press any key)${RST}"
+			read -n1 -s
+			;;
+		n)
+			echo -e "\n ${B}${W}What to create?${RST}"
+			echo "   1) New app"
+			echo "   2) New site"
+			read -r -p " > " what
+			case "$what" in
+				1)
+					read -r -p " App name: " app_name
+					[ -z "$app_name" ] && continue
+					run_cmd "bench new-app $app_name" 60
+					cd "$BENCH_DIR" && bench setup requirements 2>/dev/null || true
+					;;
+				2)
+					read -r -p " Site name: " site_name
+					[ -z "$site_name" ] && continue
+					APPS=($(get_apps))
+					selected=""
+					if [ ${#APPS[@]} -gt 0 ]; then
+						echo -e "\n ${B}${W}Select apps to install (numbers separated by space, or 0 for none):${RST}"
+						for i in "${!APPS[@]}"; do
+							echo "   $((i+1))) ${APPS[$i]}"
+						done
+						read -r -p " > " -a picks
+						for p in "${picks[@]}"; do
+							[[ "$p" =~ ^[0-9]+$ ]] && ((p >= 1 && p <= ${#APPS[@]})) && selected+=" ${APPS[$((p-1))]}"
+						done
+					fi
+					run_cmd "bench new-site $site_name${selected:+ --install-apps$selected}" 120
+					run_cmd "bench --site $site_name add-to-hosts" 10
+					;;
+			esac
+			;;
+		q) break ;;
+	esac
+done
