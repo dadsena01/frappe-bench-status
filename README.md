@@ -34,16 +34,16 @@ The header bar shows total sites, total apps, port, whether bench is running, an
 
 ### Interactive actions
 
-| Key | Action | Description |
-|---|---|---|
-| `m` | **Migrate** | Pick a site → runs `bench --site <s> migrate`. 5-minute timeout. |
-| `c` | **Clear cache** | Pick a site → runs `bench --site <s> clear-cache`. 30-second timeout. |
-| `o` | **Open in browser** | Pick a site → opens `http://<site>:<port>` in your default browser. |
-| `g` | **Git status** | Shows branch, dirty file count, and ahead/behind for every app with a git repo. |
-| `b` | **Open in VS Code** | Pick an app → opens `code apps/<app>`. |
-| `l` | **Tail error logs** | Shows the last 5 lines of each site's `logs/error.log`. |
-| `n` | **New site / app** | Multi-step wizard: create a new app or a new site with app selection. |
-| `q` | **Quit** | Exits the menu. |
+| Key | Action |
+|---|---|
+| `m` | Migrate a site |
+| `c` | Clear cache on a site |
+| `o` | Open a site in browser |
+| `g` | Git status across all apps |
+| `b` | Open an app in VS Code |
+| `l` | Tail last 5 error log lines per site |
+| `n` | Create a new app or new site |
+| `q` | Quit |
 
 ### New site/app wizard
 
