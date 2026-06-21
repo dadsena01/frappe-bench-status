@@ -7,7 +7,7 @@ One-screen dashboard for your Frappe bench. See all your sites, hosts, and apps 
 ## Install
 
 ```bash
-curl -sL https://raw.githubusercontent.com/dadsena01/bench-status/main/install.sh | bash
+curl -sL https://raw.githubusercontent.com/dadsena01/frappe-bench-status/main/install.sh | bash
 ```
 
 No dependencies beyond what you already have. Run `bench-status` from anywhere after install.
