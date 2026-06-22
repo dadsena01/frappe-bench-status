@@ -30,7 +30,7 @@ When you run `bench-status`, it shows:
 | **Host** | ✓ if the site has a `/etc/hosts` entry, ✗ if not. Shows `dev` if `developer_mode=1` |
 | **Status** | ● live if the bench port is listening, ○ idle if not |
 
-The header bar shows total sites, total apps, port, whether bench is running, and the bench path.
+The header bar shows total sites, total apps, port, whether bench is running, the default site (if set via `bench use`), and the bench path.
 
 ### Interactive actions
 

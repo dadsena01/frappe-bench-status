@@ -79,6 +79,7 @@ while true; do
 	[ -z "$PORT" ] && PORT=8000
 	BENCH_PID=$(pgrep -f "bench serve" 2>/dev/null | head -1)
 	[ -n "$BENCH_PID" ] && BENCH_RUNNING="● running" || BENCH_RUNNING="○ stopped"
+	DEFAULT_SITE=$(python3 -c "import json; f=open('$SITES_DIR/common_site_config.json'); print(json.load(f).get('default_site', ''))" 2>/dev/null || true)
 
 	SITE_DISPLAY=()
 	for s in "${SITE_NAMES[@]}"; do
@@ -96,7 +97,8 @@ while true; do
 	# render
 	[ -t 0 ] && clear 2>/dev/null || true
 	echo -e "${GY}${SEP}${RST}"
-	echo -e " ${B}${C}Sites${RST} ${GY}|${RST} ${B}${Y}$TOTAL_SITES${RST}  ${B}${C}Apps${RST} ${GY}|${RST} ${B}${Y}$TOTAL_APPS${RST}  ${B}${C}Port${RST} ${GY}|${RST} ${B}${Y}$PORT${RST}  ${B}${C}Bench${RST} ${GY}|${RST} $BENCH_RUNNING  ${B}${C}Dir${RST} ${GY}|${RST} ${D}$BENCH_DIR${RST}"
+	[ -n "$DEFAULT_SITE" ] && DEF_SITE=" ${B}${C}Default${RST} ${GY}|${RST} ${B}${Y}$DEFAULT_SITE${RST} " || DEF_SITE=""
+	echo -e " ${B}${C}Sites${RST} ${GY}|${RST} ${B}${Y}$TOTAL_SITES${RST}  ${B}${C}Apps${RST} ${GY}|${RST} ${B}${Y}$TOTAL_APPS${RST}  ${B}${C}Port${RST} ${GY}|${RST} ${B}${Y}$PORT${RST}  ${B}${C}Bench${RST} ${GY}|${RST} $BENCH_RUNNING${DEF_SITE} ${B}${C}Dir${RST} ${GY}|${RST} ${D}$BENCH_DIR${RST}"
 	echo -e "${GY}${SEP}${RST}"
 	echo -e " ${B}${W}Site                     Host              Status${RST}"
 	for entry in "${SITE_DISPLAY[@]}"; do
